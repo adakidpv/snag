@@ -161,7 +161,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         let session = reportSession(for: capture, coordinator: coordinator)
         shownSessionID = session.capture.id
-        windows.show(.report, title: "Report a bug", size: CGSize(width: 560, height: 560)) { [settings] in
+        // The only window that rebuilds its content: this call may be for a different
+        // capture than the one already on screen.
+        windows.show(
+            .report,
+            title: "Report a bug",
+            size: CGSize(width: 560, height: 560),
+            replacingContent: true
+        ) { [settings] in
             ReportPanelView(
                 session: session,
                 coordinator: coordinator,

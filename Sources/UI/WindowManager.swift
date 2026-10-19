@@ -15,15 +15,26 @@ final class WindowManager {
     private var windows: [Key: NSWindow] = [:]
     private var retainedDelegates: [Key: WindowDelegate] = [:]
 
+    /// `replacingContent` rebuilds the hosting view of a window that is already open.
+    ///
+    /// Only the Report panel wants that: each report is a different session, so its
+    /// content genuinely changes between calls. Nothing else may rebuild. Replacing the
+    /// hosting view destroys the SwiftUI tree inside it, and with it every piece of
+    /// `@State` -- which silently wiped a half-finished board setup each time Settings
+    /// was reopened from the menu bar. Settings and the Inbox don't need it anyway:
+    /// their content is driven by observable objects that update the existing tree.
     func show<Content: View>(
         _ key: Key,
         title: String,
         size: CGSize,
         resizable: Bool = true,
+        replacingContent: Bool = false,
         @ViewBuilder content: () -> Content
     ) {
         if let existing = windows[key] {
-            existing.contentView = NSHostingView(rootView: content())
+            if replacingContent {
+                existing.contentView = NSHostingView(rootView: content())
+            }
             bringForward(existing)
             return
         }
