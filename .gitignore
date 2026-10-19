@@ -1,0 +1,14 @@
+# XcodeGen output -- all generated from project.yml, which is the source of truth.
+# Committing these would let them drift from it.
+Snag.xcodeproj/
+Info.plist
+Snag.entitlements
+
+# Build & SPM
+.build/
+build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+
+# macOS
+.DS_Store

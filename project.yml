@@ -1,0 +1,118 @@
+name: Snag
+options:
+  bundleIdPrefix: dev.snag
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+packages:
+  KeyboardShortcuts:
+    url: https://github.com/sindresorhus/KeyboardShortcuts
+    majorVersion: 2.0.0
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Taken from the environment rather than hardcoded, so anyone handed this repo can
+    # build it without editing a tracked file. Set SNAG_DEVELOPMENT_TEAM before running
+    # xcodegen; README > Code signing covers finding yours and the ad-hoc fallback.
+    DEVELOPMENT_TEAM: ${SNAG_DEVELOPMENT_TEAM}
+    # Hardened runtime on, no App Sandbox: AppleScript + file watching outside a
+    # container. Signed with a stable Apple Development identity rather than ad-hoc,
+    # because TCC keys Automation grants to the code signature -- an identity that
+    # changes per build re-prompts for browser access forever.
+    ENABLE_HARDENED_RUNTIME: true
+    ENABLE_APP_SANDBOX: false
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "Apple Development"
+
+targets:
+  Snag:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+      - path: Resources
+        optional: true
+    dependencies:
+      - package: KeyboardShortcuts
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.snag.Snag
+        PRODUCT_NAME: Snag
+        GENERATE_INFOPLIST_FILE: false
+        COMBINE_HIDPI_IMAGES: true
+    info:
+      path: Info.plist
+      properties:
+        CFBundleName: Snag
+        CFBundleDisplayName: Snag
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundlePackageType: APPL
+        LSMinimumSystemVersion: $(MACOSX_DEPLOYMENT_TARGET)
+        # No Dock icon, no menu bar of its own -- lives in the status bar only.
+        LSUIElement: true
+        NSAppleEventsUsageDescription: >-
+          Snag reads the address of the frontmost browser tab so it can tell which page a
+          screenshot came from, and attach the page URL to the ticket it drafts.
+    entitlements:
+      path: Snag.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+        com.apple.security.automation.apple-events: true
+
+  SnagTests:
+    type: bundle.unit-test
+    platform: macOS
+    # Logic-only test bundle: compiles the pure modules directly rather than hosting
+    # the app, so `xcodebuild test` never has to launch a menu bar agent.
+    sources:
+      - path: Tests
+      - path: Sources/Models
+      # Shortcuts.swift is the only file here that needs the KeyboardShortcuts
+      # package, and nothing in it is worth testing -- excluding it keeps the test
+      # bundle free of that dependency.
+      - path: Sources/Support
+        excludes:
+          - Shortcuts.swift
+      - path: Sources/Store
+      - path: Sources/AI
+      # The one piece of Sources/UI with logic worth testing rather than looking at:
+      # what the Report panel writes to the store, and what it refuses to write once
+      # the record it was opened for has left the Inbox.
+      - path: Sources/UI/ReportSession.swift
+      - path: Sources/UI/BoardSetupModel.swift
+      # The library is the store's collaborator. The coordinator is the Report
+      # session's, so it's compiled here too -- never started, which is what would
+      # need a live screen-capture folder and a browser. The rest of Sources/Capture
+      # stays out.
+      - path: Sources/Capture/CaptureLibrary.swift
+      - path: Sources/Capture/CaptureWatcher.swift
+      - path: Sources/Capture/CaptureCoordinator.swift
+      - path: Sources/Capture/BrowserContextReader.swift
+      - path: Sources/Capture/ShutterSentinel.swift
+      - path: Sources/Capture/ScreenshotLocation.swift
+      # Arrives in the Jira stage; optional so the project generates before then.
+      - path: Sources/Jira
+        optional: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.snag.SnagTests
+        GENERATE_INFOPLIST_FILE: true
+
+schemes:
+  Snag:
+    build:
+      targets:
+        Snag: all
+        SnagTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - SnagTests
