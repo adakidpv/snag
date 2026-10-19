@@ -421,6 +421,48 @@ private struct BoardsSettingsTab: View {
     }
 }
 
+/// Buffers a text edit locally and writes it through on every change.
+///
+/// Every keystroke in this editor writes the whole board back into `AppSettings`, whose
+/// `didSet` persists and notifies -- so the editor re-renders mid-edit and hands the
+/// text view a freshly built `Binding`. AppKit takes that as a new string and moves the
+/// insertion point to the end, which threw the cursor to the bottom of the field
+/// whenever you backspaced in the middle of the product context.
+///
+/// Driving the text view from local state keeps the store from disturbing it. The value
+/// is still written through on every change rather than on blur, so closing the window
+/// mid-edit still loses nothing.
+private struct BufferedEdit<Field: View>: View {
+    let value: String
+    let write: (String) -> Void
+    let field: (Binding<String>) -> Field
+
+    @State private var text: String
+
+    init(
+        value: String,
+        write: @escaping (String) -> Void,
+        @ViewBuilder field: @escaping (Binding<String>) -> Field
+    ) {
+        self.value = value
+        self.write = write
+        self.field = field
+        _text = State(initialValue: value)
+    }
+
+    var body: some View {
+        field($text)
+            .onChange(of: text) { _, edited in
+                if edited != value { write(edited) }
+            }
+            // A different board was selected, or this one changed underneath us --
+            // follow it rather than holding a stale buffer.
+            .onChange(of: value) { _, current in
+                if current != text { text = current }
+            }
+    }
+}
+
 private struct BoardEditor: View {
     let board: Board
     @Bindable var settings: AppSettings
@@ -439,10 +481,28 @@ private struct BoardEditor: View {
         )
     }
 
+    private func write<T>(_ keyPath: WritableKeyPath<Board, T>, _ newValue: T) {
+        var copy = board
+        copy[keyPath: keyPath] = newValue
+        settings.upsert(board: copy)
+    }
+
+    /// Comma-separated text to a trimmed list with the blanks dropped.
+    private func writeList(_ keyPath: WritableKeyPath<Board, [String]>, _ raw: String) {
+        write(
+            keyPath,
+            raw.split(separator: ",")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+        )
+    }
+
     var body: some View {
         Form {
             Section {
-                TextField("Name", text: binding(\.name))
+                BufferedEdit(value: board.name, write: { write(\.name, $0) }) { text in
+                    TextField("Name", text: text)
+                }
                 Picker("Mode", selection: binding(\.mode)) {
                     ForEach(Board.Mode.allCases) { Text($0.label).tag($0) }
                 }
@@ -450,26 +510,23 @@ private struct BoardEditor: View {
             }
 
             Section("Jira") {
-                TextField("Site", text: binding(\.site), prompt: Text("your-site"))
+                BufferedEdit(value: board.site, write: { write(\.site, $0) }) { text in
+                    TextField("Site", text: text, prompt: Text("your-site"))
+                }
                 Text("The {site} in https://{site}.atlassian.net")
                     .font(.caption2).foregroundStyle(.secondary)
-                TextField("Project ID", text: binding(\.projectID), prompt: Text("10001"))
-                TextField("Issue type ID", text: binding(\.issueTypeID), prompt: Text("10004"))
-                TextField(
-                    "Default labels",
-                    text: Binding(
-                        get: { board.defaultLabels.joined(separator: ", ") },
-                        set: { newValue in
-                            var copy = board
-                            copy.defaultLabels = newValue
-                                .split(separator: ",")
-                                .map { $0.trimmingCharacters(in: .whitespaces) }
-                                .filter { !$0.isEmpty }
-                            settings.upsert(board: copy)
-                        }
-                    ),
-                    prompt: Text("triage, from-snag")
-                )
+                BufferedEdit(value: board.projectID, write: { write(\.projectID, $0) }) { text in
+                    TextField("Project ID", text: text, prompt: Text("10001"))
+                }
+                BufferedEdit(value: board.issueTypeID, write: { write(\.issueTypeID, $0) }) { text in
+                    TextField("Issue type ID", text: text, prompt: Text("10004"))
+                }
+                BufferedEdit(
+                    value: board.defaultLabels.joined(separator: ", "),
+                    write: { writeList(\.defaultLabels, $0) }
+                ) { text in
+                    TextField("Default labels", text: text, prompt: Text("triage, from-snag"))
+                }
             }
 
             Section("Drafting") {
@@ -480,54 +537,55 @@ private struct BoardEditor: View {
                 // the trailing half of the width. This is a paragraph, not a value.
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Product context")
-                    TextEditor(text: binding(\.productContext))
-                        .font(.body)
-                        .scrollContentBackground(.hidden)
-                        .padding(6)
-                        .frame(minHeight: 150)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color(nsColor: .textBackgroundColor))
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6).strokeBorder(.separator)
-                        )
-                        // TextEditor has no prompt of its own.
-                        .overlay(alignment: .topLeading) {
-                            if board.productContext.isEmpty {
-                                Text("What this product is, and the parts a bug can be in")
-                                    .foregroundStyle(.tertiary)
-                                    .padding(.horizontal, 11)
-                                    .padding(.vertical, 14)
-                                    .allowsHitTesting(false)
+                    BufferedEdit(
+                        value: board.productContext,
+                        write: { write(\.productContext, $0) }
+                    ) { text in
+                        TextEditor(text: text)
+                            .font(.body)
+                            .scrollContentBackground(.hidden)
+                            .padding(6)
+                            .frame(minHeight: 150)
+                            .background(
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color(nsColor: .textBackgroundColor))
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 6).strokeBorder(.separator)
+                            )
+                            // TextEditor has no prompt of its own.
+                            .overlay(alignment: .topLeading) {
+                                if text.wrappedValue.isEmpty {
+                                    Text("What this product is, and the parts a bug can be in")
+                                        .foregroundStyle(.tertiary)
+                                        .padding(.horizontal, 11)
+                                        .padding(.vertical, 14)
+                                        .allowsHitTesting(false)
+                                }
                             }
-                        }
+                    }
                     Text("Goes at the top of the prompt, above the rules Snag always sends. Leave it empty to draft without any product description.")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
 
-                TextField(
-                    "Areas",
-                    text: Binding(
-                        get: { board.areas.joined(separator: ", ") },
-                        set: { newValue in
-                            var copy = board
-                            copy.areas = newValue
-                                .split(separator: ",")
-                                .map { $0.trimmingCharacters(in: .whitespaces) }
-                                .filter { !$0.isEmpty }
-                            settings.upsert(board: copy)
-                        }
-                    ),
-                    prompt: Text("checkout, search, admin")
-                )
+                BufferedEdit(
+                    value: board.areas.joined(separator: ", "),
+                    write: { writeList(\.areas, $0) }
+                ) { text in
+                    TextField("Areas", text: text, prompt: Text("checkout, search, admin"))
+                }
                 Text("The areas a bug can be classified into, in the order they're offered. Comma separated. Leave it empty and Claude picks its own word for where the bug is.")
                     .font(.caption2).foregroundStyle(.secondary)
             }
 
             if board.mode == .restAPI {
                 Section("API token") {
-                    TextField("Account email", text: binding(\.accountEmail), prompt: Text("you@example.com"))
+                    BufferedEdit(
+                        value: board.accountEmail,
+                        write: { write(\.accountEmail, $0) }
+                    ) { text in
+                        TextField("Account email", text: text, prompt: Text("you@example.com"))
+                    }
                     HStack {
                         SecureField(
                             hasStoredToken ? "Stored in the Keychain" : "Atlassian API token",
