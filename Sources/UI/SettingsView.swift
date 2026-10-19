@@ -17,7 +17,7 @@ struct SettingsView: View {
             BoardsSettingsTab(settings: settings)
                 .tabItem { Label("Boards", systemImage: "square.stack") }
         }
-        .frame(minWidth: 560, minHeight: 500)
+        .frame(minWidth: 620, minHeight: 560)
     }
 }
 
@@ -473,15 +473,38 @@ private struct BoardEditor: View {
             }
 
             Section("Drafting") {
-                TextField(
-                    "Product context",
-                    text: binding(\.productContext),
-                    prompt: Text("What this product is, and the parts a bug can be in"),
-                    axis: .vertical
-                )
-                .lineLimit(4...12)
-                Text("Goes at the top of the prompt, above the rules Snag always sends. Leave it empty to draft without any product description.")
-                    .font(.caption2).foregroundStyle(.secondary)
+                // A TextEditor rather than a vertical TextField, and the label above it
+                // rather than beside it. A vertical TextField stops at its line limit
+                // with no way to scroll -- paste a few paragraphs and the end of them
+                // becomes unreachable -- and a grouped Form row leaves the field only
+                // the trailing half of the width. This is a paragraph, not a value.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Product context")
+                    TextEditor(text: binding(\.productContext))
+                        .font(.body)
+                        .scrollContentBackground(.hidden)
+                        .padding(6)
+                        .frame(minHeight: 150)
+                        .background(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Color(nsColor: .textBackgroundColor))
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6).strokeBorder(.separator)
+                        )
+                        // TextEditor has no prompt of its own.
+                        .overlay(alignment: .topLeading) {
+                            if board.productContext.isEmpty {
+                                Text("What this product is, and the parts a bug can be in")
+                                    .foregroundStyle(.tertiary)
+                                    .padding(.horizontal, 11)
+                                    .padding(.vertical, 14)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                    Text("Goes at the top of the prompt, above the rules Snag always sends. Leave it empty to draft without any product description.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
 
                 TextField(
                     "Areas",

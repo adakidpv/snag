@@ -375,7 +375,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         windows.show(
             .settings,
             title: "Snag Settings",
-            size: CGSize(width: 580, height: 560)
+            size: CGSize(width: 680, height: 620)
         ) { [settings] in
             SettingsView(settings: settings, coordinator: coordinator)
         }
