@@ -43,11 +43,14 @@ if the project directory moves. To run it somewhere stable (and to make launch-a
 work, which the system refuses from a build directory), install it with:
 
 ```bash
-cd snag && cp -R "$(xcodebuild -scheme Snag -destination 'platform=macOS' -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR/{print $2; exit}')/Snag.app" /Applications/
+cd snag && rm -rf /Applications/Snag.app && cp -R "$(xcodebuild -scheme Snag -destination 'platform=macOS' -showBuildSettings 2>/dev/null | awk -F' = ' '/ BUILT_PRODUCTS_DIR/{print $2; exit}')/Snag.app" /Applications/
 ```
 
 The `cd snag` matters: run it from anywhere else and `xcodebuild` finds no project, the
 substitution comes back empty, and `cp` fails with `/Snag.app: No such file or directory`.
+The `rm -rf` matters on every run after the first: `cp -R` into an existing bundle copies
+*inside* it, leaving you with `Snag.app/Snag.app` and an install that won't launch. Quit
+Snag from the menu bar before replacing it.
 
 Run the tests with:
 
@@ -55,7 +58,7 @@ Run the tests with:
 xcodebuild -scheme Snag -destination 'platform=macOS' test
 ```
 
-To update later, `git pull` and build again. Nothing self-updates.
+To update later, `git pull` and run both commands again. Nothing self-updates.
 
 ### Code signing
 
