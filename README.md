@@ -362,3 +362,8 @@ Inbox should then list the snag as `filed` with a working link.
 - **The create is rejected and setup did warn you.** Working as intended: someone has to
   make that field optional on the Bug screen, or give it a default, before Snag can file
   there.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). The one dependency,
+[KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts), is MIT too.
